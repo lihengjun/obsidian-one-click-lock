@@ -1,0 +1,67 @@
+/* One Click Lock Plugin - Styles */
+
+/* Locked Properties area visual indicator */
+.metadata-container[data-locked="true"] {
+  opacity: 0.75;
+  position: relative !important;
+}
+
+/* Lock icon (top right, SVG) */
+.metadata-container[data-locked="true"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+  z-index: 100;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* Lock icon for dark theme */
+.theme-dark .metadata-container[data-locked="true"]::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* Hide locked property row (lock icon already shows status) */
+.metadata-property[data-property-key="locked"] {
+  display: none !important;
+}
+
+/* Ensure no lock icon after title */
+.inline-title::after {
+  content: none !important;
+}
+
+/* Locked title style */
+[data-lock-title="true"] {
+  cursor: default !important;
+}
+
+/* Hide remove buttons */
+.metadata-container[data-locked="true"] .multi-select-pill-remove-button {
+  display: none !important;
+}
+
+/* Hide add property button */
+.metadata-container[data-locked="true"] .metadata-add-button {
+  display: none !important;
+}
+
+/* Disable all interactions */
+.metadata-container[data-locked="true"] .metadata-property-value,
+.metadata-container[data-locked="true"] .metadata-property-key,
+.metadata-container[data-locked="true"] .multi-select-input,
+.metadata-container[data-locked="true"] input,
+.metadata-container[data-locked="true"] textarea {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+/* Hide suggestion popup when note is locked */
+body:has(.metadata-container[data-locked="true"]) .suggestion-container {
+  display: none !important;
+}

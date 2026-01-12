@@ -1,0 +1,9 @@
+{
+  "id": "one-click-lock",
+  "name": "One Click Lock",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Lock Obsidian notes in one click to prevent accidental edits",
+  "author": "LI Heng-Jun",
+  "isDesktopOnly": false
+}
