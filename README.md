@@ -12,7 +12,7 @@ Lock Obsidian notes in one click to prevent accidental edits.
 - **Menu**: Right-click menu support
 - **Command**: Command palette support (can bind hotkey)
 - **Lock Scope**: Properties area and title
-- **Visual Indicator**: Lock icon displayed when locked
+- **Visual Indicator**: Lock icon in title and file explorer
 - **Cross-platform**: Works on desktop and mobile
 
 ---
@@ -21,7 +21,7 @@ Lock Obsidian notes in one click to prevent accidental edits.
 - **菜单支持**：右键菜单操作
 - **命令面板**：支持命令面板（可绑定快捷键）
 - **锁定范围**：Properties 区域和标题
-- **视觉提示**：锁定时显示锁图标
+- **视觉提示**：标题和文件导航栏显示锁图标
 - **跨平台**：支持桌面和移动端
 
 ---
@@ -76,8 +76,23 @@ When locked, the plugin adds `locked: true` to the note's frontmatter and:
 
 - Disables editing in Properties area / 禁用 Properties 区域编辑
 - Disables title editing / 禁用标题编辑
-- Shows a lock icon indicator / 显示锁图标提示
+- Shows a lock icon in title / 在标题后显示锁图标
+- Shows a lock icon in file explorer / 在文件导航栏显示锁图标
 - Hides add/remove property buttons / 隐藏添加/删除属性按钮
+- Auto-hides Properties area if only `locked` property exists / 如果只有 `locked` 属性则自动隐藏 Properties 区域
+
+---
+
+## Changelog / 更新日志
+
+### v1.1.0
+- Added lock icon display in note title
+- Added lock icon display in file explorer
+- Auto-hide Properties area when only `locked` property exists
+- Improved mobile support
+
+### v1.0.0
+- Initial release
 
 ---
 
