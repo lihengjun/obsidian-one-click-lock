@@ -66,6 +66,9 @@ module.exports = class LockPropertiesPlugin extends Plugin {
       id: 'toggle-lock',
       name: 'Toggle Lock Note',
       icon: 'lock',
+      hotkeys: [
+        { modifiers: ['Alt'], key: 'L' }
+      ],
       callback: () => {
         const file = this.app.workspace.getActiveFile();
         if (file) {
