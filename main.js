@@ -453,6 +453,7 @@ module.exports = class LockPropertiesPlugin extends Plugin {
   setupMutationObserver() {
     this.observer = new MutationObserver((mutations) => {
       let shouldCheck = false;
+      let shouldUpdateExplorer = false;
 
       for (const mutation of mutations) {
         if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
@@ -462,7 +463,11 @@ module.exports = class LockPropertiesPlugin extends Plugin {
               if (node.matches?.('input, textarea, .metadata-property, .metadata-container') ||
                 node.querySelector?.('input, textarea')) {
                 shouldCheck = true;
-                break;
+              }
+              // Check if file explorer items are added
+              if (node.matches?.('[data-path], .nav-file, .nav-file-title, .tree-item') ||
+                node.querySelector?.('[data-path]')) {
+                shouldUpdateExplorer = true;
               }
             }
           }
@@ -472,6 +477,11 @@ module.exports = class LockPropertiesPlugin extends Plugin {
       if (shouldCheck) {
         // 重新检查锁定状态
         setTimeout(() => this.checkAndLock(), 50);
+      }
+
+      if (shouldUpdateExplorer) {
+        // 更新文件导航栏锁图标
+        setTimeout(() => this.updateExplorerLockIcons(), 100);
       }
     });
 
