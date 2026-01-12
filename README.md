@@ -4,6 +4,10 @@ Lock Obsidian notes in one click to prevent accidental edits.
 
 一键锁定 Obsidian 笔记，防止误编辑。
 
+## Demo / 演示
+
+![Demo](./screenshot-1.gif)
+
 ---
 
 ## Features / 功能
