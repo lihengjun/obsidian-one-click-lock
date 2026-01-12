@@ -81,6 +81,21 @@ module.exports = class LockPropertiesPlugin extends Plugin {
     setTimeout(() => this.updateExplorerLockIcons(), 600);
     setTimeout(() => this.updateExplorerLockIcons(), 1500);
     setTimeout(() => this.updateExplorerLockIcons(), 3000);
+    setTimeout(() => this.updateExplorerLockIcons(), 5000);
+    setTimeout(() => this.updateExplorerLockIcons(), 8000);
+
+    // 监听 workspace ready 事件（移动端可能需要更长时间）
+    this.app.workspace.onLayoutReady(() => {
+      setTimeout(() => this.updateExplorerLockIcons(), 500);
+      setTimeout(() => this.updateExplorerLockIcons(), 2000);
+    });
+
+    // 监听 active-leaf-change 事件
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', () => {
+        setTimeout(() => this.updateExplorerLockIcons(), 300);
+      })
+    );
 
     // Setup MutationObserver to monitor Properties area changes
     this.setupMutationObserver();
