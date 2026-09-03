@@ -1,20 +1,38 @@
 // One Click Lock Plugin for Obsidian
 // Lock notes in one click to prevent accidental edits
 
-const { Plugin, Notice } = require('obsidian');
+const { Plugin, Notice, TFolder, PluginSettingTab, Setting } = require('obsidian');
+
+// 默认设置
+const DEFAULT_SETTINGS = {
+  showExplorerLockIcon: true,
+  showTitleLockIcon: true,
+  hideEmptyProperties: true,
+  showFileContextMenu: true,
+  showFolderContextMenu: true,
+  showRibbonIcon: true,
+};
 
 module.exports = class LockPropertiesPlugin extends Plugin {
 
   async onload() {
     console.log('One Click Lock plugin loaded');
 
+    // 加载设置
+    await this.loadSettings();
+
+    // 添加设置面板
+    this.addSettingTab(new LockPropertiesSettingTab(this.app, this));
+
     // Add ribbon icon (true One Click)
-    this.addRibbonIcon('lock', 'Toggle Lock Note', () => {
-      const file = this.app.workspace.getActiveFile();
-      if (file) {
-        this.toggleLock(file);
-      }
-    });
+    if (this.settings.showRibbonIcon) {
+      this.ribbonIcon = this.addRibbonIcon('lock', 'Toggle Lock Note', () => {
+        const file = this.app.workspace.getActiveFile();
+        if (file) {
+          this.toggleLock(file);
+        }
+      });
+    }
 
     // 监听文件打开
     this.registerEvent(
@@ -48,20 +66,36 @@ module.exports = class LockPropertiesPlugin extends Plugin {
     // 注册文件菜单（右上角三点菜单）
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
+        // 文件夹右键菜单
+        if (file instanceof TFolder) {
+          if (this.settings.showFolderContextMenu) {
+            menu.addItem((item) => {
+              item
+                .setTitle('Toggle Lock All Notes in Folder')
+                .setIcon('lock')
+                .onClick(() => this.toggleFolderLockSmart(file));
+            });
+          }
+          return;
+        }
+
+        // 单个文件右键菜单
         if (!file || file.extension !== 'md') return;
 
-        const isLocked = this.isFileLocked(file);
+        if (this.settings.showFileContextMenu) {
+          const isLocked = this.isFileLocked(file);
 
-        menu.addItem((item) => {
-          item
-            .setTitle(isLocked ? 'Unlock Note' : 'Lock Note')
-            .setIcon(isLocked ? 'unlock' : 'lock')
-            .onClick(() => this.toggleLock(file));
-        });
+          menu.addItem((item) => {
+            item
+              .setTitle(isLocked ? 'Unlock Note' : 'Lock Note')
+              .setIcon(isLocked ? 'unlock' : 'lock')
+              .onClick(() => this.toggleLock(file));
+          });
+        }
       })
     );
 
-    // 注册命令面板命令
+    // 注册命令面板命令（智能切换：多选时批量操作，否则操作当前文件）
     this.addCommand({
       id: 'toggle-lock',
       name: 'Toggle Lock Note',
@@ -70,9 +104,16 @@ module.exports = class LockPropertiesPlugin extends Plugin {
         { modifiers: ['Alt'], key: 'L' }
       ],
       callback: () => {
-        const file = this.app.workspace.getActiveFile();
-        if (file) {
-          this.toggleLock(file);
+        const selectedFiles = this.getSelectedFiles();
+        if (selectedFiles.length > 0) {
+          // 有选中的文件，批量切换
+          this.batchToggleLock(selectedFiles);
+        } else {
+          // 没有选中，操作当前打开的文件
+          const file = this.app.workspace.getActiveFile();
+          if (file) {
+            this.toggleLock(file);
+          }
         }
       }
     });
@@ -124,6 +165,148 @@ module.exports = class LockPropertiesPlugin extends Plugin {
     if (!file) return false;
     const cache = this.app.metadataCache.getFileCache(file);
     return cache?.frontmatter?.locked === true;
+  }
+
+  // 获取文件导航栏中选中的文件
+  getSelectedFiles() {
+    const selectedElements = document.querySelectorAll('.nav-file-title.is-selected, .tree-item-self.is-selected');
+    const files = [];
+
+    selectedElements.forEach(el => {
+      const filePath = el.getAttribute('data-path');
+      if (filePath && filePath.endsWith('.md')) {
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file) {
+          files.push(file);
+        }
+      }
+    });
+
+    return files;
+  }
+
+  // 获取文件夹内所有 .md 文件（递归）
+  getMarkdownFilesInFolder(folder) {
+    const files = [];
+
+    const processFolder = (currentFolder) => {
+      for (const child of currentFolder.children) {
+        if (child instanceof TFolder) {
+          // 递归处理子文件夹
+          processFolder(child);
+        } else if (child.extension === 'md') {
+          files.push(child);
+        }
+      }
+    };
+
+    processFolder(folder);
+    return files;
+  }
+
+  // 智能切换文件夹内所有笔记的锁定状态
+  async toggleFolderLockSmart(folder) {
+    const files = this.getMarkdownFilesInFolder(folder);
+
+    if (files.length === 0) {
+      new Notice('No markdown files found in this folder.');
+      return;
+    }
+
+    // 智能判断：全部已锁定则解锁，否则锁定
+    const allLocked = files.every(file => this.isFileLocked(file));
+
+    let count = 0;
+    for (const file of files) {
+      if (allLocked) {
+        // 全部已锁定，执行解锁
+        if (this.isFileLocked(file)) {
+          await this.app.fileManager.processFrontMatter(file, (fm) => {
+            delete fm.locked;
+          });
+          count++;
+        }
+      } else {
+        // 有未锁定的，执行锁定
+        if (!this.isFileLocked(file)) {
+          await this.app.fileManager.processFrontMatter(file, (fm) => {
+            fm.locked = true;
+          });
+          count++;
+        }
+      }
+    }
+
+    // 显示提示
+    const fragment = document.createDocumentFragment();
+    const icon = document.createElement('span');
+    icon.style.marginRight = '6px';
+    icon.style.display = 'inline-flex';
+    icon.style.verticalAlign = 'middle';
+
+    if (allLocked) {
+      icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+      fragment.appendChild(icon);
+      fragment.appendChild(document.createTextNode(`${count} note${count !== 1 ? 's' : ''} unlocked in folder`));
+    } else {
+      icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+      fragment.appendChild(icon);
+      fragment.appendChild(document.createTextNode(`${count} note${count !== 1 ? 's' : ''} locked in folder`));
+    }
+
+    new Notice(fragment);
+
+    // 更新导航栏图标
+    setTimeout(() => this.updateExplorerLockIcons(), 300);
+  }
+
+  // 批量切换锁定状态（智能判断：全部已锁定则解锁，否则锁定）
+  async batchToggleLock(files) {
+    // 判断是否全部已锁定
+    const allLocked = files.every(file => this.isFileLocked(file));
+
+    let count = 0;
+    for (const file of files) {
+      if (allLocked) {
+        // 全部已锁定，执行解锁
+        if (this.isFileLocked(file)) {
+          await this.app.fileManager.processFrontMatter(file, (fm) => {
+            delete fm.locked;
+          });
+          count++;
+        }
+      } else {
+        // 有未锁定的，执行锁定
+        if (!this.isFileLocked(file)) {
+          await this.app.fileManager.processFrontMatter(file, (fm) => {
+            fm.locked = true;
+          });
+          count++;
+        }
+      }
+    }
+
+    // 显示提示
+    const fragment = document.createDocumentFragment();
+    const icon = document.createElement('span');
+    icon.style.marginRight = '6px';
+    icon.style.display = 'inline-flex';
+    icon.style.verticalAlign = 'middle';
+
+    if (allLocked) {
+      icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>`;
+      fragment.appendChild(icon);
+      fragment.appendChild(document.createTextNode(`${count} note${count !== 1 ? 's' : ''} unlocked`));
+    } else {
+      icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
+      fragment.appendChild(icon);
+      fragment.appendChild(document.createTextNode(`${count} note${count !== 1 ? 's' : ''} locked`));
+    }
+
+    new Notice(fragment);
+
+    // 更新导航栏图标
+    setTimeout(() => this.updateExplorerLockIcons(), 300);
   }
 
   // 切换锁定状态
@@ -190,8 +373,8 @@ module.exports = class LockPropertiesPlugin extends Plugin {
       this.lockProperties();
       this.lockTitle();
 
-      // Hide Properties container only if no other properties exist
-      if (hasOnlyLocked) {
+      // Hide Properties container only if no other properties exist (and setting enabled)
+      if (hasOnlyLocked && this.settings.hideEmptyProperties) {
         this.hideEmptyPropertiesContainer();
       } else {
         // Has other properties, make sure container is visible
@@ -432,12 +615,16 @@ module.exports = class LockPropertiesPlugin extends Plugin {
         title.style.userSelect = 'none';
       }
 
-      // 添加锁图标到标题后
-      if (!title.querySelector('.title-lock-icon')) {
+      // 添加锁图标到标题后（根据设置）
+      if (this.settings.showTitleLockIcon && !title.querySelector('.title-lock-icon')) {
         const lockIcon = document.createElement('span');
         lockIcon.className = 'title-lock-icon';
         lockIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
         title.appendChild(lockIcon);
+      } else if (!this.settings.showTitleLockIcon) {
+        // 如果设置关闭了，移除已有的锁图标
+        const existingIcon = title.querySelector('.title-lock-icon');
+        if (existingIcon) existingIcon.remove();
       }
     });
   }
@@ -512,6 +699,12 @@ module.exports = class LockPropertiesPlugin extends Plugin {
 
   // 更新文件导航栏的锁图标
   updateExplorerLockIcons() {
+    // 如果设置关闭了导航栏锁图标，移除所有图标并返回
+    if (!this.settings.showExplorerLockIcon) {
+      this.removeAllExplorerLockIcons();
+      return;
+    }
+
     // 获取所有带有 data-path 属性的文件导航项（通用选择器，支持桌面端和移动端）
     // 包括: .nav-file-title, .tree-item-self, 以及任何带 data-path 的元素
     const fileItems = document.querySelectorAll('[data-path$=".md"]');
@@ -547,4 +740,101 @@ module.exports = class LockPropertiesPlugin extends Plugin {
       }
     });
   }
+
+  // 加载设置
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  // 保存设置
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 };
+
+// 设置面板
+class LockPropertiesSettingTab extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    containerEl.createEl('h2', { text: 'One Click Lock Settings' });
+
+    // 图标显示设置
+    containerEl.createEl('h3', { text: 'Icon Display' });
+
+    new Setting(containerEl)
+      .setName('Show lock icon in file explorer')
+      .setDesc('Display a lock icon next to locked notes in the file explorer')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showExplorerLockIcon)
+        .onChange(async (value) => {
+          this.plugin.settings.showExplorerLockIcon = value;
+          await this.plugin.saveSettings();
+          this.plugin.updateExplorerLockIcons();
+        }));
+
+    new Setting(containerEl)
+      .setName('Show lock icon in note title')
+      .setDesc('Display a lock icon after the title of locked notes')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showTitleLockIcon)
+        .onChange(async (value) => {
+          this.plugin.settings.showTitleLockIcon = value;
+          await this.plugin.saveSettings();
+          this.plugin.checkAndLock();
+        }));
+
+    new Setting(containerEl)
+      .setName('Show ribbon icon')
+      .setDesc('Display the lock icon in the left ribbon (requires reload)')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showRibbonIcon)
+        .onChange(async (value) => {
+          this.plugin.settings.showRibbonIcon = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // 菜单显示设置
+    containerEl.createEl('h3', { text: 'Context Menu' });
+
+    new Setting(containerEl)
+      .setName('Show file context menu')
+      .setDesc('Show "Lock Note / Unlock Note" in file right-click menu')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showFileContextMenu)
+        .onChange(async (value) => {
+          this.plugin.settings.showFileContextMenu = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Show folder context menu')
+      .setDesc('Show "Toggle Lock All Notes in Folder" in folder right-click menu')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showFolderContextMenu)
+        .onChange(async (value) => {
+          this.plugin.settings.showFolderContextMenu = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // 其他设置
+    containerEl.createEl('h3', { text: 'Other' });
+
+    new Setting(containerEl)
+      .setName('Hide empty properties')
+      .setDesc('Hide the Properties section when only the "locked" property exists')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.hideEmptyProperties)
+        .onChange(async (value) => {
+          this.plugin.settings.hideEmptyProperties = value;
+          await this.plugin.saveSettings();
+          this.plugin.checkAndLock();
+        }));
+  }
+}
